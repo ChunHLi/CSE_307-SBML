@@ -13,6 +13,7 @@ class Node():
         self.parent = parent
         self.lineno = lineno
         self.colno = colno
+        self.ret_val = 'undefined'
 
 
 class Statement(Node):
@@ -57,6 +58,56 @@ class Assignment(Node):
         indent_level += 1
         r += "\n" + ("  " * indent_level) + "Name:  " + str(self.name)
         r += "\n" + ("  " * indent_level) + "Assigned:  " + str(self.assigned)
+        indent_level -= 1
+        return r
+
+
+class If_Statement(Node):
+    def __init__(self, parent=None, lineno=0, colno=0, condition=None, true_statement=None):
+        super().__init__(parent, lineno, colno)
+        self.condition = condition
+        self.true_statement = true_statement
+
+    def __str__(self):
+        r = "If_Statement:"
+        global indent_level
+        indent_level += 1
+        r += "\n" + ("  " * indent_level) + "condition:  " + str(self.condition)
+        r += "\n" + ("  " * indent_level) + "true_statement:  " + str(self.true_statement)
+        indent_level -= 1
+        return r
+
+
+class If_Else_Statement(Node):
+    def __init__(self, parent=None, lineno=0, colno=0, condition=None, true_statement=None, false_statement=None):
+        super().__init__(parent, lineno, colno)
+        self.condition = condition
+        self.true_statement = true_statement
+        self.false_statement = false_statement
+
+    def __str__(self):
+        r = "If_Else_Statement:"
+        global indent_level
+        indent_level += 1
+        r += "\n" + ("  " * indent_level) + "condition:  " + str(self.condition)
+        r += "\n" + ("  " * indent_level) + "true_statement:  " + str(self.true_statement)
+        r += "\n" + ("  " * indent_level) + "false_statement:  " + str(self.false_statement)
+        indent_level -= 1
+        return r
+
+
+class While_Loop(Node):
+    def __init__(self, parent=None, lineno=0, colno=0, condition=None, true_statement=None):
+        super().__init__(parent, lineno, colno)
+        self.condition = condition
+        self.true_statement = true_statement
+
+    def __str__(self):
+        r = "While_Loop:"
+        global indent_level
+        indent_level += 1
+        r += "\n" + ("  " * indent_level) + "condition:  " + str(self.condition)
+        r += "\n" + ("  " * indent_level) + "true_statement:  " + str(self.true_statement)
         indent_level -= 1
         return r
 
@@ -149,6 +200,7 @@ class Boolean(Node):
     def __init__(self, parent=None, lineno=0, colno=0, child=None):
         super().__init__(parent, lineno, colno)
         self.child = child
+        self.ret_val = 'bool'
 
     def __str__(self):
         r = "Boolean:"
@@ -340,6 +392,7 @@ class Member(Node):
         super().__init__(parent, lineno, colno)
         self.element = element
         self.list_node = list_node
+        self.ret_val = 'bool'
 
     def __str__(self):
         r = "Member:"
@@ -372,6 +425,7 @@ class Conjunction(Node):
         super().__init__(parent, lineno, colno)
         self.left = left
         self.right = right
+        self.ret_val = 'bool'
 
     def __str__(self):
         r = "Conjunction:"
@@ -388,6 +442,7 @@ class Disjunction(Node):
         super().__init__(parent, lineno, colno)
         self.left = left
         self.right = right
+        self.ret_val = 'bool'
 
     def __str__(self):
         r = "Disjunction:"
@@ -404,6 +459,7 @@ class Equal(Node):
         super().__init__(parent, lineno, colno)
         self.left = left
         self.right = right
+        self.ret_val = "bool"
 
     def __str__(self):
         r = "Equal:"
@@ -420,6 +476,7 @@ class Nequal(Node):
         super().__init__(parent, lineno, colno)
         self.left = left
         self.right = right
+        self.ret_val = 'bool'
 
     def __str__(self):
         r = "Nequal:"
@@ -436,6 +493,7 @@ class Gte(Node):
         super().__init__(parent, lineno, colno)
         self.left = left
         self.right = right
+        self.ret_val = 'bool'
 
     def __str__(self):
         r = "Gte:"
@@ -452,6 +510,7 @@ class Gt(Node):
         super().__init__(parent, lineno, colno)
         self.left = left
         self.right = right
+        self.ret_val = 'bool'
 
     def __str__(self):
         r = "Gt:"
@@ -468,6 +527,7 @@ class Lte(Node):
         super().__init__(parent, lineno, colno)
         self.left = left
         self.right = right
+        self.ret_val = 'bool'
 
     def __str__(self):
         r = "Lte:"
@@ -484,6 +544,7 @@ class Lt(Node):
         super().__init__(parent, lineno, colno)
         self.left = left
         self.right = right
+        self.ret_val = 'bool'
 
     def __str__(self):
         r = "Lt:"
@@ -497,6 +558,13 @@ class Lt(Node):
 # Tokenizer, Parser, Evaluator
 
 # Token Names
+
+
+reserved = {
+    'if' : 'IF',
+    'else' : 'ELSE',
+    'while' : 'WHILE'
+}
 
 
 tokens = (
@@ -534,7 +602,7 @@ tokens = (
     'ASSIGN',
     'PRINT',
     'NAME',
-)
+) + tuple(reserved.values())
 
 t_LBRACE = r'\{'
 t_RBRACE = r'\}'
@@ -623,6 +691,7 @@ def t_BOOLEAN(t):
 
 def t_NAME(t):
     r'[a-zA-Z][a-zA-Z0-9_]*'
+    t.type = reserved.get(t.value, 'NAME')
     return t
 
 
@@ -656,12 +725,15 @@ precedence = (
 
 
 def p_start(t):
-    'start : statement-list'
+    '''
+    start : statement-list
+          | block
+    '''
     run(t[1])
 
 
 def p_block(t):
-    'statement-list : LBRACE statement-list RBRACE'
+    'block : LBRACE statement-list RBRACE'
     t[0] = t[2]
 
 
@@ -685,6 +757,28 @@ def p_statement_expression(t):
               | var_assign SEMICOLON
     '''
     t[0] = t[1]
+
+
+def p_statement_while(t):
+    'statement : WHILE LPAREN expression RPAREN block'
+    t[0] = While_Loop(None, t.lineno, t.lexpos, t[3], t[5])
+    t[3].parent = t[0]
+    t[5].parent = t[0]
+
+
+def p_statement_else(t):
+    'statement : IF LPAREN expression RPAREN block ELSE block'
+    t[0] = If_Else_Statement(None, t.lineno, t.lexpos, t[3], t[5], t[7])
+    t[3].parent = t[0]
+    t[5].parent = t[0]
+    t[7].parent = t[0]
+
+
+def p_statement_if(t):
+    'statement : IF LPAREN expression RPAREN block'
+    t[0] = If_Statement(None, t.lineno, t.lexpos, t[3], t[5])
+    t[3].parent = t[0]
+    t[5].parent = t[0]
 
 
 def p_print_call(t):
@@ -963,13 +1057,26 @@ def run(p):
             run(p.statement)
             if (type(p.next_statement) != My_None):
                 run(p.next_statement)
+        if type(p) == While_Loop:
+            while (run(p.condition)):
+                run(p.true_statement)
+        if type(p) == If_Else_Statement:
+            if (run(p.condition)):
+                run(p.true_statement)
+            else:
+                run(p.false_statement)
+        if type(p) == If_Statement:
+            if (run(p.condition)):
+                run(p.true_statement)
         if type(p) == Print_Statement:
             print(run(p.parameter))
         if type(p) == Name:
             return env[p.called]
         if type(p) == Assignment:
-            env[p.name.called] = run(p.assigned)
-            print(env)
+            if (type(p.name) == List_Indexing):
+                (run(p.name.list_node))[run(p.name.index)] = run(p.assigned)
+            else:
+                env[p.name.called] = run(p.assigned)
         if type(p) == Integer or \
            type(p) == Real or \
            type(p) == String or \
@@ -1045,7 +1152,8 @@ def run(p):
         if type(p) == Modulus:
             return run(p.left) % run(p.right)
     except Exception as e:
-        return "SEMANTIC ERROR"
+        print("SEMANTIC ERROR")
+        exit()
 
 
 def tmp_run(p):
@@ -1053,9 +1161,15 @@ def tmp_run(p):
     return p
 
 
+with open(sys.argv[1], 'r') as f:
+    contents = f.read()
+parser.parse(contents)
+'''
+
 while True:
     try:
         s = input('')
     except EOFError:
         break
     parser.parse(s)
+'''
