@@ -672,7 +672,7 @@ def t_STRING(t):
 
 
 def t_REAL_VAL(t):
-    r'(?=\.\d|\d)(?:0|[1-9]\d*)?(?:\.\d*)?(?:\d[eE][+\-]?\d+)|(\d*(\.\d|\d\.)\d*)'
+    r'(?=\.\d|\d)(?:0|[1-9]\d*)?(?:\.\d*)?(?:\d?[eE][+\-]?\d+)|(\d*(\.\d|\d\.)\d*)'
     t.value = float(t.value)
     return t
 
@@ -710,15 +710,15 @@ lexer = lex.lex()
 precedence = (
     ('left', 'DISJUNCTION'),
     ('left', 'CONJUNCTION'),
-    ('left', 'GT', 'GTE', 'EQUAL', 'NEQUAL', 'LTE', 'LT'),
     ('left', 'NEGATION'),
+    ('left', 'GT', 'GTE', 'EQUAL', 'NEQUAL', 'LTE', 'LT'),
+    ('right', 'CONS'),
     ('left', 'MEMBER'),
     ('left', 'SUBTRACTION', 'ADDITION'),
     ('left', 'MODULUS', 'INTDIVISION', 'DIVISION', 'MULTIPLICATION'),
-    ('right', 'CONS'),
     ('right', 'EXPONENTIATION'),
-    ('right', 'INDEXTUPES'),
     ('left', 'LBRACKET'),
+    ('left', 'INDEXTUPES'),
     ('left', 'LPAREN'),
     ('right', 'UMINUS'),
 )
@@ -808,16 +808,42 @@ def p_expression_tuple(t):
 
 def p_tuple(t):
     '''
-    tuple : expression COMMA tuple
+    tuple : expression COMMA tuple_tail
     '''
     t[0] = Tuple_Node(None, t.lineno, t.lexpos, t[1], t[3])
     t[1].parent = t[0]
     t[3].parent = t[0]
 
 
+def p_tuple_tail(t):
+    '''
+    tuple_tail : expression COMMA tuple_tail
+    '''
+    t[0] = Tuple_Node(None, t.lineno, t.lexpos, t[1], t[3])
+    t[1].parent = t[0]
+    t[3].parent = t[0]
+
+
+def p_tuple_tail_last(t):
+    '''
+    tuple_tail : expression empty
+    '''
+    t[0] = Tuple_Node(None, t.lineno, t.lexpos, t[1], t[2])
+    t[1].parent = t[0]
+    t[2].parent = t[0]
+
+
+
 def p_tuple_none(t):
     '''
     tuple : empty
+    '''
+    t[0] = t[1]
+
+
+def p_tuple_tail_none(t):
+    '''
+    tuple_tail : empty
     '''
     t[0] = t[1]
 
@@ -843,13 +869,6 @@ def p_list(t):
     t[2].parent = t[0]
 
 
-def p_list_none(t):
-    '''
-    list : empty
-    '''
-    t[0] = t[1]
-
-
 def p_list_tail(t):
     '''
     list_tail : COMMA expression list_tail
@@ -857,6 +876,14 @@ def p_list_tail(t):
     t[0] = List_Node(None, t.lineno, t.lexpos, t[2], t[3])
     t[2].parent = t[0]
     t[3].parent = t[0]
+
+
+def p_list__none(t):
+    '''
+    list : empty
+    '''
+    t[0] = List_Node(None, t.lineno, t.lexpos, t[1], t[1])
+    t[1].parent = t[0]
 
 
 def p_list_tail_none(t):
@@ -1088,7 +1115,9 @@ def run(p):
             else:
                 return (run(p.element),) + run(p.tuple_tail)
         if type(p) == List_Node:
-            if type(p.list_tail) == My_None:
+            if type(p.element) == My_None:
+                return []
+            elif type(p.list_tail) == My_None:
                 return [run(p.element)]
             else:
                 return [run(p.element)] + run(p.list_tail)
@@ -1105,50 +1134,79 @@ def run(p):
         if type(p) == Gte:
             return run(p.left) >= run(p.right)
         if type(p) == List_Indexing:
-            return (run(p.list_node))[run(p.index)]
+            a = run(p.list_node)
+            b = run(p.index)
+            if (type(b) == int):
+                return a[b]
+            else:
+                raise Exception("SEMANTIC ERROR")
         if type(p) == Tuple_Indexing:
-            return (run(p.tuple_node))[run(p.index)]
+            return (run(p.tuple_node))[run(p.index) - 1]
         if type(p) == Cons:
             return [run(p.element)] + run(p.list_node)
         if type(p) == Conjunction:
-            return run(p.left) and run(p.right)
+            a = run(p.left)
+            b = run(p.right)
+            if (type(a) == bool and type(b) == bool):
+                return a and b
+            else:
+                raise Exception("SEMANTIC ERROR")
         if type(p) == Disjunction:
-            return run(p.left) or run(p.right)
+            a = run(p.left)
+            b = run(p.right)
+            if (type(a) == bool and type(b) == bool):
+                return a or b
+            else:
+                raise Exception("SEMANTIC ERROR")
         if type(p) == Member:
-            return run(p.left) in run(p.right)
+            return run(p.element) in run(p.list_node)
         if type(p) == Addition:
-            if (type(run(p.left)) == bool or type(run(p.left)) == bool):
+            a = run(p.left)
+            b = run(p.right)
+            if (type(a) == bool or type(b) == bool):
                 raise Exception("SEMANTIC ERROR")
             else:
-                return run(p.left) + run(p.right)
+                return a + b
         if type(p) == Subtraction:
-            if (type(run(p.left)) == int or type(run(p.left)) == float) and \
-               (type(run(p.right)) == int or type(run(p.right)) == float):
-                return run(p.left) - run(p.right)
+            a = run(p.left)
+            b = run(p.right)
+            if (type(a) == int or type(a) == float) and \
+               (type(b) == int or type(b) == float):
+                return a - b
             else:
                 raise Exception("SEMANTIC ERROR")
         if type(p) == Multiplication:
-            if (type(run(p.left)) == int or type(run(p.left)) == float) and \
-               (type(run(p.right)) == int or type(run(p.right)) == float):
-                return run(p.left) * run(p.right)
+            a = run(p.left)
+            b = run(p.right)
+            if (type(a) == int or type(a) == float) and \
+               (type(b) == int or type(b) == float):
+                return a * b
             else:
                 raise Exception("SEMANTIC ERROR")
         if type(p) == Intdivision:
-            if (type(run(p.left)) == int or type(run(p.left)) == float) and \
-               (type(run(p.right)) == int or type(run(p.right)) == float):
-                return run(p.left) // run(p.right)
+            a = run(p.left)
+            b = run(p.right)
+            if (type(a) == int or type(a) == float) and \
+               (type(b) == int or type(b) == float):
+                return a // b
             else:
                 raise Exception("SEMANTIC ERROR")
         if type(p) == Division:
-            if (type(run(p.left)) == int or type(run(p.left)) == float) and \
-               (type(run(p.right)) == int or type(run(p.right)) == float):
-                return run(p.left) / run(p.right)
+            a = run(p.left)
+            b = run(p.right)
+            if (type(a) == int or type(a) == float) and \
+               (type(b) == int or type(b) == float):
+                return a / b
             else:
                 raise Exception("SEMANTIC ERROR")
         if type(p) == Exponentiation:
             return run(p.left) ** run(p.right)
         if type(p) == Negation:
-            return not run(p.child)
+            a = run(p.child)
+            if type(a) == bool:
+                return not a
+            else:
+                raise Exception("SEMANTIC ERROR")
         if type(p) == Modulus:
             return run(p.left) % run(p.right)
     except Exception as e:
